@@ -1,0 +1,46 @@
+-- CRIAR EXPORTAÇÃO
+DECLARE
+v_hdnl NUMBER;
+BEGIN
+v_hdnl := DBMS_DATAPUMP.OPEN(
+operation => 'EXPORT', 
+job_mode => 'SCHEMA', 
+job_name=>null);
+DBMS_DATAPUMP.ADD_FILE(
+handle => v_hdnl, 
+filename => 'SANKHYA_BKP_IGOR.dmp', 
+directory => 'DATA_PUMP_DIR', 
+filetype => dbms_datapump.ku$_file_type_dump_file);
+DBMS_DATAPUMP.ADD_FILE(
+handle => v_hdnl, 
+filename => 'SANKHYA_BKP_IGOR.log', 
+directory => 'DATA_PUMP_DIR', 
+filetype => dbms_datapump.ku$_file_type_log_file);
+DBMS_DATAPUMP.METADATA_FILTER(v_hdnl,'SCHEMA_EXPR','IN (''SANKHYA'')');
+DBMS_DATAPUMP.METADATA_FILTER(v_hdnl,'EXCLUDE_NAME_EXPR', 
+q'[IN (SELECT NAME FROM sys.OBJ$ WHERE TYPE# IN (66,67,74,79,59,62,46) AND OWNER# IN 
+(SELECT USER# FROM SYS.USER$ WHERE NAME IN ('RDSADMIN','SYS','SYSTEM','RDS_DATAGUARD','RDSSEC')))]','PROCOBJ');
+DBMS_DATAPUMP.START_JOB(v_hdnl);
+END;
+/
+
+-- VERIFICAR SE ARQUIVO ESTA SENHO GERADO 
+set linesize 180
+column owner format a20
+column directory_name format a40
+column directory_path format a50
+select owner, directory_name, directory_path from dba_directories where directory_name=‘DATA_PUMP_DIR’;
+
+-- VERIFICA JOS 
+SELECT owner_name, job_name, state from dba_datapump_jobs where state='EXECUTING';
+
+
+-- ENVIA PARA O S3 
+
+SELECT rdsadmin.rdsadmin_s3_tasks.upload_to_s3(
+              p_bucket_name    => 'mys3bucket', 
+              p_prefix         => 'SANKHYA_BKP_IGOR.dmp', 
+              p_s3_prefix      => '', 
+              p_directory_name => 'DATA_PUMP_DIR') 
+AS TASK_ID FROM DUAL;
+Note: The AWS console can be used to point and click for the upload to the S3 bucket.
